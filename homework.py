@@ -1,4 +1,3 @@
-import json
 import logging.config
 import os
 import time
@@ -9,7 +8,7 @@ import telegram
 from dotenv import load_dotenv
 
 from config_log import LOGGER_CONFIG
-from exceptions import ENVError, RequestAPIYandexPracticumError, HomeworkError
+from exceptions import *
 
 load_dotenv()
 
@@ -21,7 +20,7 @@ PRACTICUM_TOKEN = os.getenv('PRACTICUM_TOKEN')
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 
-RETRY_TIME = 60
+RETRY_TIME = 600
 ENDPOINT = 'https://practicum.yandex.ru/api/user_api/homework_statuses/'
 HEADERS = {'Authorization': f'OAuth {PRACTICUM_TOKEN}'}
 
@@ -32,7 +31,6 @@ HOMEWORK_STATUSES = {
     'rejected': 'Работа проверена: у ревьюера есть замечания.'
 }
 
-message_error = ''
 message_cash = ''
 
 
@@ -55,29 +53,17 @@ def send_message(bot, message):
 def get_api_answer(current_timestamp: int) -> dict:
     """Делает запрос к API-сервису."""
 
-    global message_error
     timestamp = current_timestamp or int(time.time())
     params = {'from_date': timestamp}
-    try:
-        homework_statuses = requests.get(
-            ENDPOINT, headers=HEADERS, params=params
+    homework_statuses = requests.get(
+        ENDPOINT, headers=HEADERS, params=params
+    )
+    if homework_statuses.status_code != HTTPStatus.OK:
+        raise RequestAPIYandexPracticumError(
+            'API практикума не доступен'
         )
-        if homework_statuses.status_code != HTTPStatus.OK:
-            raise RequestAPIYandexPracticumError(
-                'API практикума не доступен'
-            )
-        _logger.debug('Запрос к API практикума выполнен успешно')
-        return json.loads(homework_statuses.text)
-    except RequestAPIYandexPracticumError:
-        message_error = (
-            f'код ответа API практикума '
-            f'{homework_statuses.status_code}'
-        )
-        _logger.error(message_error)
-    except requests.exceptions.ConnectionError:
-        message_error = 'Ошибка соединения с url API практикума'
-        _logger.error(message_error)
-    return {}
+    _logger.debug('Запрос к API практикума выполнен успешно')
+    return homework_statuses.json()
 
 
 def check_response(response: dict) -> list:
@@ -86,19 +72,21 @@ def check_response(response: dict) -> list:
     В качестве параметра функция получает ответ API.
     """
 
-    global message_error
-    list_homeworks: list = []
+    if not isinstance(response, dict):
+        raise TypeError('response должен быть dict')
 
-    try:
-        list_homeworks = response['homeworks']
-        if not list_homeworks:
-            _logger.debug('Получен пустой список домашних работ')
-        else:
-            _logger.debug('Получен список домашних работ')
-    except (IndexError, TypeError, KeyError):
-        message_error = 'API практикума вернул неожидаемое значение'
-        _logger.error(message_error)
-        list_homeworks = ['error_list_homeworks']
+    if 'homeworks' not in response:
+        raise KeyError('API практикума вернул неожидаемое значение')
+
+    if not isinstance(response['homeworks'], list):
+        raise TypeError('Тип значения "homeworks" не list')
+
+    list_homeworks = response['homeworks']
+
+    if not list_homeworks:
+        _logger.debug('Получен пустой список домашних работ')
+    else:
+        _logger.debug('Получен список домашних работ')
     return list_homeworks
 
 
@@ -107,31 +95,35 @@ def parse_status(homework: dict) -> str:
     Извлекает из информации о конкретной домашней работе статус этой работы.
     """
 
-    try:
-        homework_name = homework['homework_name'].split('.')[0]
-        _logger.debug(f'Название домашней работы - {homework_name}')
-        homework_status = homework['status']
-        _logger.debug(f'Статус домашней работы - {homework_status}')
-        reviewer_comment = homework['reviewer_comment']
-        _logger.debug(f'Коммент по домашке от ревью - {homework_status}')
-    except KeyError:
-        _logger.error('Не удалось спарсить статус домашней работы')
-        homework_status = 'Статус неизвестен'
-        homework_name = 'Имя не известно'
-        reviewer_comment = 'Комментарий не известен'
+    if 'homework_name' not in homework:
+        raise KeyError('Не удалось спарсить имя домашней работы')
 
-    try:
-        verdict = HOMEWORK_STATUSES[homework_status]
-        _logger.debug(f'Вердикт - {verdict}')
-    except KeyError:
-        _logger.error(
-            f'Получен неизвестный статус домашней работы - {homework_name}'
+    homework_name = homework['homework_name'].split('.')[0]
+    _logger.debug(f'Название домашней работы - {homework_name}')
+
+    if 'status' not in homework:
+        raise KeyError('Не удалось спарсить статус домашней работы')
+
+    homework_status = homework['status']
+    _logger.debug(f'Статус домашней работы - {homework_status}')
+
+    if 'reviewer_comment' not in homework:
+        raise KeyError('Не удалось спарсить комментарий ревьюера')
+
+    reviewer_comment = homework['reviewer_comment']
+    _logger.debug(f'Коммент по домашке от ревью - {reviewer_comment}')
+
+    if homework_status not in HOMEWORK_STATUSES:
+        raise KeyError(
+            f'Получен неизвестный статус домашней работы - {homework_status}'
         )
-        verdict = 'ВЕРДИКТ НЕИЗВЕСТЕН'
+
+    verdict = HOMEWORK_STATUSES[homework_status]
+    _logger.debug(f'Вердикт - {verdict}')
 
     return (
-        f'Изменился статус проверки работы "{homework_name}". {verdict} '
-        f'Комментарий от ревьюера: {reviewer_comment}'
+        f'Изменился статус проверки работы "{homework_name}". {verdict}'
+        # f' Комментарий от ревьюера: {reviewer_comment}'
     )
 
 
@@ -152,7 +144,6 @@ def main():
         _logger.error('Переменные окружения недоступны, проверьте файл .env')
         raise ENVError('Токены не найдены в файле .env')
 
-    global message_error
     global message_cash
 
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
@@ -165,8 +156,6 @@ def main():
                 raise RequestAPIYandexPracticumError
 
             list_homeworks = check_response(response)
-            if 'error_list_homeworks' in list_homeworks:
-                raise HomeworkError
 
             if list_homeworks:
                 message = parse_status(list_homeworks[0])
@@ -175,10 +164,6 @@ def main():
             current_timestamp = response['current_date']
             time.sleep(RETRY_TIME)
 
-        except (RequestAPIYandexPracticumError, HomeworkError):
-            message = f'error: {message_error}'
-            send_message(bot, message)
-            time.sleep(RETRY_TIME)
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
             _logger.error(message)

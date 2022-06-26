@@ -4,7 +4,3 @@ class RequestAPIYandexPracticumError(Exception):
 
 class ENVError(Exception):
     """Ошибка доступности переменных окружения"""
-
-
-class HomeworkError(Exception):
-    """Ошибка запроса домашней работы"""
