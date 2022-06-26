@@ -2,5 +2,9 @@ class RequestAPIYandexPracticumError(Exception):
     """Статус ответа при запросе к API Яндекс Практикум отличается от 200"""
 
 
-class ExceptionListHomeworks(Exception):
-    pass
+class ENVError(Exception):
+    """Ошибка доступности переменных окружения"""
+
+
+class HomeworkError(Exception):
+    """Ошибка запроса домашней работы"""

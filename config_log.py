@@ -16,19 +16,24 @@ LOGGER_CONFIG = {
     'handlers': {
         'file': {
             'class': 'logging.handlers.RotatingFileHandler',
-            'level': 'NOTSET',
+            'level': 'ERROR',
             'formatter': 'my_format',
             'filename': 'log.log',
             'maxBytes': 50000000,
             'backupCount': 5,
             'encoding': 'utf8'
+        },
+        'std': {
+            'class': 'logging.StreamHandler',
+            'level': 'NOTSET',
+            'formatter': 'my_format'
         }
     },
 
     'loggers': {
         'bot_logger': {
             'level': 'DEBUG',
-            'handlers': ['file']
+            'handlers': ['file', 'std']
         }
     }
 }
