@@ -88,10 +88,8 @@ def check_response(response: dict) -> list:
 
 
 def parse_status(homework: dict) -> str:
-    """
-    Извлекает из информации о конкретной
-    домашней работе статус этой работы.
-    """
+    """Извлекает из информации о конкретной
+    домашней работе статус этой работы."""
     if 'homework_name' not in homework:
         raise KeyError('Не удалось спарсить имя домашней работы')
 
