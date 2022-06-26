@@ -8,7 +8,7 @@ import telegram
 from dotenv import load_dotenv
 
 from config_log import LOGGER_CONFIG
-from exceptions import *
+from exceptions import ENVError, RequestAPIYandexPracticumError
 
 load_dotenv()
 
@@ -36,7 +36,6 @@ message_cash = ''
 
 def send_message(bot, message):
     """Отправляет сообщение в Telegram чат."""
-
     global message_cash
     try:
         if message_cash != message:
@@ -52,7 +51,6 @@ def send_message(bot, message):
 
 def get_api_answer(current_timestamp: int) -> dict:
     """Делает запрос к API-сервису."""
-
     timestamp = current_timestamp or int(time.time())
     params = {'from_date': timestamp}
     homework_statuses = requests.get(
@@ -71,7 +69,6 @@ def check_response(response: dict) -> list:
     Проверяет ответ API на корректность.
     В качестве параметра функция получает ответ API.
     """
-
     if not isinstance(response, dict):
         raise TypeError('response должен быть dict')
 
@@ -92,9 +89,9 @@ def check_response(response: dict) -> list:
 
 def parse_status(homework: dict) -> str:
     """
-    Извлекает из информации о конкретной домашней работе статус этой работы.
+    Извлекает из информации о конкретной
+    домашней работе статус этой работы.
     """
-
     if 'homework_name' not in homework:
         raise KeyError('Не удалось спарсить имя домашней работы')
 
@@ -129,7 +126,6 @@ def parse_status(homework: dict) -> str:
 
 def check_tokens() -> bool:
     """Проверяет доступность переменных окружения."""
-
     if PRACTICUM_TOKEN and TELEGRAM_TOKEN and TELEGRAM_CHAT_ID:
         _logger.debug('Переменные окружения доступны')
         return True
@@ -139,7 +135,6 @@ def check_tokens() -> bool:
 
 def main():
     """Основная логика работы бота."""
-
     if not check_tokens():
         _logger.error('Переменные окружения недоступны, проверьте файл .env')
         raise ENVError('Токены не найдены в файле .env')
