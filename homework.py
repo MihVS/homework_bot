@@ -8,8 +8,8 @@ import telegram
 from dotenv import load_dotenv
 
 from config_log import LOGGER_CONFIG
-from exceptions import (ENVError, RequestAPIYandexPracticumError,
-                        SendMessageError, HomeWorkIsEmpty)
+from exceptions import (ENVError, HomeWorkIsEmpty,
+                        RequestAPIYandexPracticumError, SendMessageError)
 
 load_dotenv()
 
