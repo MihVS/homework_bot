@@ -20,42 +20,37 @@ PRACTICUM_TOKEN = os.getenv('PRACTICUM_TOKEN')
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 
-RETRY_TIME = 600
+RETRY_TIME = 60
 ENDPOINT = 'https://practicum.yandex.ru/api/user_api/homework_statuses/'
 HEADERS = {'Authorization': f'OAuth {PRACTICUM_TOKEN}'}
 
 
-HOMEWORK_STATUSES = {
+VERDIKTS_REVIEWER = {
     'approved': 'Работа проверена: ревьюеру всё понравилось. Ура!',
     'reviewing': 'Работа взята на проверку ревьюером.',
     'rejected': 'Работа проверена: у ревьюера есть замечания.'
 }
 
-message_cash = ''
-
 
 def send_message(bot, message):
     """Отправляет сообщение в Telegram чат."""
-    global message_cash
-    try:
-        if message_cash != message:
-            bot.send_message(TELEGRAM_CHAT_ID, message)
-            message_cash = message
-            _logger.info('Сообщение в телеграм отправлено')
-        else:
-            _logger.debug('Сообщение в телеграм не отправлено, '
-                          'т.к. не изменилось')
-    except telegram.TelegramError:
-        _logger.error('Сообщение в телеграм не отправлено')
+    bot.send_message(TELEGRAM_CHAT_ID, message)
+    _logger.info('Сообщение в телеграм отправлено')
 
 
 def get_api_answer(current_timestamp: int) -> dict:
     """Делает запрос к API-сервису."""
     timestamp = current_timestamp or int(time.time())
     params = {'from_date': timestamp}
-    homework_statuses = requests.get(
-        ENDPOINT, headers=HEADERS, params=params
-    )
+    try:
+        homework_statuses = requests.get(
+            ENDPOINT, headers=HEADERS, params=params
+        )
+    except Exception:
+        raise RequestAPIYandexPracticumError(
+            'Ошибка запроса к API практикума.'
+        )
+
     if homework_statuses.status_code != HTTPStatus.OK:
         raise RequestAPIYandexPracticumError(
             'API практикума не доступен'
@@ -75,10 +70,10 @@ def check_response(response: dict) -> list:
     if 'homeworks' not in response:
         raise KeyError('API практикума вернул неожидаемое значение')
 
-    if not isinstance(response['homeworks'], list):
-        raise TypeError('Тип значения "homeworks" не list')
-
     list_homeworks = response['homeworks']
+
+    if not isinstance(list_homeworks, list):
+        raise TypeError('Тип значения "homeworks" не list')
 
     if not list_homeworks:
         _logger.debug('Получен пустой список домашних работ')
@@ -110,12 +105,12 @@ def parse_status(homework: dict) -> str:
     reviewer_comment = homework['reviewer_comment']
     _logger.debug(f'Коммент по домашке от ревью - {reviewer_comment}')
 
-    if homework_status not in HOMEWORK_STATUSES:
+    if homework_status not in VERDIKTS_REVIEWER:
         raise KeyError(
             f'Получен неизвестный статус домашней работы - {homework_status}'
         )
 
-    verdict = HOMEWORK_STATUSES[homework_status]
+    verdict = VERDIKTS_REVIEWER[homework_status]
     _logger.debug(f'Вердикт - {verdict}')
 
     return (
@@ -126,7 +121,7 @@ def parse_status(homework: dict) -> str:
 
 def check_tokens() -> bool:
     """Проверяет доступность переменных окружения."""
-    if PRACTICUM_TOKEN and TELEGRAM_TOKEN and TELEGRAM_CHAT_ID:
+    if all([PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]):
         _logger.debug('Переменные окружения доступны')
         return True
 
@@ -136,33 +131,44 @@ def check_tokens() -> bool:
 def main():
     """Основная логика работы бота."""
     if not check_tokens():
-        _logger.error('Переменные окружения недоступны, проверьте файл .env')
-        raise ENVError('Токены не найдены в файле .env')
+        raise ENVError('Переменные окружения недоступны, проверьте файл .env')
 
-    global message_cash
+    message_cash = ''
+    message = ''
 
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
-    current_timestamp = int(time.time())
+    current_timestamp = 1
 
     while True:
         try:
+            if message and message != message_cash:
+                send_message(bot, message)
+                message_cash = message
+
             response = get_api_answer(current_timestamp)
+
             if not response:
-                raise RequestAPIYandexPracticumError
+                raise RequestAPIYandexPracticumError(
+                    'Ответ от API практикума пустой'
+                )
 
             list_homeworks = check_response(response)
 
             if list_homeworks:
                 message = parse_status(list_homeworks[0])
-                send_message(bot, message)
 
             current_timestamp = response['current_date']
-            time.sleep(RETRY_TIME)
+
+        except telegram.TelegramError as error:
+            _logger.error(
+                f'Сообщение в телеграм не отправлено. Ошибка: {error}'
+            )
 
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
             _logger.error(message)
-            send_message(bot, message)
+
+        finally:
             time.sleep(RETRY_TIME)
 
 
