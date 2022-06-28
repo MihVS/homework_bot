@@ -11,3 +11,8 @@ class ENVError(Exception):
 class SendMessageError(Exception):
     """Ошибка отправки сообщения в телеграм"""
     pass
+
+
+class HomeWorkIsEmpty(Exception):
+    """Список домашних работ пуст"""
+    pass

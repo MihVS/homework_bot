@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 
 from config_log import LOGGER_CONFIG
 from exceptions import (ENVError, RequestAPIYandexPracticumError,
-                        SendMessageError)
+                        SendMessageError, HomeWorkIsEmpty)
 
 load_dotenv()
 
@@ -77,9 +77,8 @@ def check_response(response: dict) -> list:
         raise TypeError('Тип значения "homeworks" не list')
 
     if not list_homeworks:
-        _logger.debug('Получен пустой список домашних работ')
-    else:
-        _logger.debug('Получен список домашних работ')
+        raise HomeWorkIsEmpty('Получен пустой список домашних работ')
+
     return list_homeworks
 
 
@@ -164,6 +163,9 @@ def main():
 
         except SendMessageError as error:
             _logger.error(f'Сообщение в телеграм не отправлено. {error}')
+
+        except HomeWorkIsEmpty as error:
+            _logger.error(error)
 
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
