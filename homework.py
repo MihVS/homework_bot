@@ -120,7 +120,7 @@ def parse_status(homework: dict) -> str:
 
     return (
         f'Изменился статус проверки работы "{homework_name}". {verdict}'
-        f'{reviewer_comment}'
+        # f'{reviewer_comment}'
     )
 
 
