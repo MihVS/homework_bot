@@ -133,7 +133,9 @@ def main():
     if check_tokens():
         _logger.debug('Переменные окружения доступны')
     else:
-        raise ENVError('Переменные окружения недоступны, проверьте файл .env')
+        error = 'Переменные окружения недоступны, проверьте файл .env'
+        _logger.error(error)
+        raise ENVError(error)
 
     message_cash = ''
     message = ''
