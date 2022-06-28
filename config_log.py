@@ -16,7 +16,7 @@ LOGGER_CONFIG = {
     'handlers': {
         'file': {
             'class': 'logging.handlers.RotatingFileHandler',
-            'level': 'ERROR',
+            'level': 'INFO',
             'formatter': 'my_format',
             'filename': 'log.log',
             'maxBytes': 50000000,

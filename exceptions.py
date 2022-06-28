@@ -6,3 +6,8 @@ class RequestAPIYandexPracticumError(Exception):
 class ENVError(Exception):
     """Ошибка доступности переменных окружения"""
     pass
+
+
+class SendMessageError(Exception):
+    """Ошибка отправки сообщения в телеграм"""
+    pass

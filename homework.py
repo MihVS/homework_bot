@@ -8,7 +8,8 @@ import telegram
 from dotenv import load_dotenv
 
 from config_log import LOGGER_CONFIG
-from exceptions import ENVError, RequestAPIYandexPracticumError
+from exceptions import (ENVError, RequestAPIYandexPracticumError,
+                        SendMessageError)
 
 load_dotenv()
 
@@ -25,7 +26,7 @@ ENDPOINT = 'https://practicum.yandex.ru/api/user_api/homework_statuses/'
 HEADERS = {'Authorization': f'OAuth {PRACTICUM_TOKEN}'}
 
 
-VERDIKTS_REVIEWER = {
+VERDICTS_REVIEWER = {
     'approved': 'Работа проверена: ревьюеру всё понравилось. Ура!',
     'reviewing': 'Работа взята на проверку ревьюером.',
     'rejected': 'Работа проверена: у ревьюера есть замечания.'
@@ -34,8 +35,11 @@ VERDIKTS_REVIEWER = {
 
 def send_message(bot, message):
     """Отправляет сообщение в Telegram чат."""
-    bot.send_message(TELEGRAM_CHAT_ID, message)
-    _logger.info('Сообщение в телеграм отправлено')
+    try:
+        bot.send_message(TELEGRAM_CHAT_ID, message)
+        _logger.info(f'Сообщение в телеграм отправлено: {message}')
+    except Exception as error:
+        raise SendMessageError(f'Ошибка: {error}')
 
 
 def get_api_answer(current_timestamp: int) -> dict:
@@ -46,14 +50,11 @@ def get_api_answer(current_timestamp: int) -> dict:
         homework_statuses = requests.get(
             ENDPOINT, headers=HEADERS, params=params
         )
+        if homework_statuses.status_code != HTTPStatus.OK:
+            raise Exception
     except Exception:
         raise RequestAPIYandexPracticumError(
             'Ошибка запроса к API практикума.'
-        )
-
-    if homework_statuses.status_code != HTTPStatus.OK:
-        raise RequestAPIYandexPracticumError(
-            'API практикума не доступен'
         )
     _logger.debug('Запрос к API практикума выполнен успешно')
     return homework_statuses.json()
@@ -67,7 +68,7 @@ def check_response(response: dict) -> list:
     if not isinstance(response, dict):
         raise TypeError('response должен быть dict')
 
-    if 'homeworks' not in response:
+    if 'homeworks' and 'current_date' not in response:
         raise KeyError('API практикума вернул неожидаемое значение')
 
     list_homeworks = response['homeworks']
@@ -102,35 +103,37 @@ def parse_status(homework: dict) -> str:
     if 'reviewer_comment' not in homework:
         raise KeyError('Не удалось спарсить комментарий ревьюера')
 
-    reviewer_comment = homework['reviewer_comment']
-    _logger.debug(f'Коммент по домашке от ревью - {reviewer_comment}')
+    reviewer_comment = (f" Комментарий от ревьюера: "
+                        f"{homework['reviewer_comment']}")
+    _logger.debug(reviewer_comment)
 
-    if homework_status not in VERDIKTS_REVIEWER:
+    if homework_status not in VERDICTS_REVIEWER:
         raise KeyError(
             f'Получен неизвестный статус домашней работы - {homework_status}'
         )
 
-    verdict = VERDIKTS_REVIEWER[homework_status]
+    if homework_status == 'reviewing':
+        reviewer_comment = ''
+
+    verdict = VERDICTS_REVIEWER[homework_status]
     _logger.debug(f'Вердикт - {verdict}')
 
     return (
         f'Изменился статус проверки работы "{homework_name}". {verdict}'
-        # f' Комментарий от ревьюера: {reviewer_comment}'
+        f'{reviewer_comment}'
     )
 
 
 def check_tokens() -> bool:
     """Проверяет доступность переменных окружения."""
-    if all([PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]):
-        _logger.debug('Переменные окружения доступны')
-        return True
-
-    return False
+    return all([PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID])
 
 
 def main():
     """Основная логика работы бота."""
-    if not check_tokens():
+    if check_tokens():
+        _logger.debug('Переменные окружения доступны')
+    else:
         raise ENVError('Переменные окружения недоступны, проверьте файл .env')
 
     message_cash = ''
@@ -159,10 +162,8 @@ def main():
 
             current_timestamp = response['current_date']
 
-        except telegram.TelegramError as error:
-            _logger.error(
-                f'Сообщение в телеграм не отправлено. Ошибка: {error}'
-            )
+        except SendMessageError as error:
+            _logger.error(f'Сообщение в телеграм не отправлено. {error}')
 
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
